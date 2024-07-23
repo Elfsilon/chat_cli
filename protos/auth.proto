@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+option go_package = "./auth";
+
+package auth;
+
+service Auth {
+  rpc HealthCheck(HealthRequest) returns (HealthResponse) {}
+  rpc Login(LoginRequest) returns (LoginResponse) {}
+  rpc GetRefreshToken(GetRefreshTokenRequest) returns (GetRefreshTokenResponse) {}
+  rpc GetAccessToken(GetAccessTokenRequest) returns (GetAccessTokenResponse) {}
+  rpc GetServiceToken(GetServiceTokenRequest) returns (GetServiceTokenResponse) {}
+  rpc CheckResource(CheckResourceRequest) returns (CheckResourceResponse) {}
+}
+
+message HealthRequest {}
+message HealthResponse {}
+
+message LoginRequest {
+  string name = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string refreshToken = 1;
+}
+
+message GetRefreshTokenRequest {
+  string refreshToken = 2;
+}
+
+message GetRefreshTokenResponse {
+  string refreshToken = 1;
+}
+
+message GetAccessTokenRequest {
+  string refreshToken = 2;
+}
+
+message GetAccessTokenResponse {
+  string accessToken = 1;
+}
+
+message GetServiceTokenRequest {
+  string hash = 1;
+}
+
+message GetServiceTokenResponse {
+  string accessToken = 1;
+}
+
+message CheckResourceRequest {
+  string fullMethod = 1;
+}
+
+message CheckResourceResponse {
+  bool hasAccess = 1;
+  int64 userID = 2;
+  string reason = 3;
+}

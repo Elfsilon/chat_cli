@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+option go_package = "./user";
+
+package user;
+
+import "google/protobuf/timestamp.proto";
+
+service UserService {
+  rpc HealthCheck(HealthRequest) returns (HealthResponse) {}
+  rpc Create(CreateUserRequest) returns (CreateUserResponse) {}
+  rpc Get(GetRequest) returns (UserModel) {}
+  rpc GetList(GetListRequest) returns (GetListResponse) {}
+  rpc Update(UpdateRequest) returns (UpdateResponse) {}
+  rpc Delete(DeleteRequest) returns (DeleteResponse) {}
+}
+
+message HealthRequest {}
+message HealthResponse {}
+
+enum Role {
+  User = 0;
+  Admin = 1;
+}
+
+message UserModel {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+  Role role = 4;
+  string passwordHash = 5;
+  google.protobuf.Timestamp createdAt = 6;
+  google.protobuf.Timestamp updatedAt = 7;
+}
+
+message CreateUserRequest {
+  string name = 1; 
+  string email = 2;
+  string password = 3;
+  Role role = 4;  
+}
+
+message CreateUserResponse {
+  int64 id = 1;
+}
+
+message GetRequest {
+  int64 id = 1;
+  string username = 2;
+}
+
+message GetListRequest {}
+
+message GetListResponse {
+  repeated UserModel users = 1;
+}
+
+message UpdateRequest {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message UpdateResponse {}
+
+message DeleteRequest {
+  int64 id = 1;
+}
+
+message DeleteResponse {}
