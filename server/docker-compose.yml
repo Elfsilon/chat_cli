@@ -1,0 +1,104 @@
+version: "3.9"
+
+services:
+  auth:
+    build:
+      context: .
+      dockerfile: auth.dockerfile
+    env_file: ./config/auth.env
+    hostname: auth_service
+    depends_on:
+      - database
+    ports:
+      - 3000:3000
+    networks:
+      - net
+
+  chat:
+    build:
+      context: .
+      dockerfile: chat.dockerfile
+    env_file: ./config/chat.env
+    hostname: chat_service
+    depends_on:
+      - nats
+      - auth
+      - database
+    ports:
+      - 3001:3001
+    networks:
+      - net
+
+  user:
+    build:
+      context: .
+      dockerfile: user.dockerfile
+    env_file: ./config/user.env
+    hostname: user_service
+    depends_on:
+      - auth
+      - database
+    ports:
+      - 3002:3002
+    networks:
+      - net
+
+  migrate_auth:
+    image: arigaio/atlas:latest
+    command: >
+      migrate apply --url postgres://postgres:1234@db:5432/auth?sslmode=disable
+    depends_on:
+      - database
+    volumes:
+      - ./migrations/auth/:/migrations
+    networks:
+      - net
+
+  migrate_chat:
+    image: arigaio/atlas:latest
+    command: >
+      migrate apply --url postgres://postgres:1234@db:5432/chat?sslmode=disable
+    depends_on:
+      - database
+    volumes:
+      - ./migrations/chat/:/migrations
+    networks:
+      - net
+
+  migrate_user:
+    image: arigaio/atlas:latest
+    command: >
+      migrate apply --url postgres://postgres:1234@db:5432/user?sslmode=disable
+    depends_on:
+      - database
+    volumes:
+      - ./migrations/user/:/migrations
+    networks:
+      - net
+
+  database:
+    image: postgres
+    restart: always
+    hostname: db
+    ports:
+      - 5544:5432
+    environment:
+      POSTGRES_PASSWORD: 1234
+    networks:
+      - net
+
+  nats:
+    image: "nats:2.10.17"
+    expose:
+      - 4222
+    ports:
+      - 8222:8222
+      - 6222:6222
+      - 4222:4222
+    hostname: nats_server
+    networks:
+      - net
+
+networks:
+  net:
+    driver: bridge
