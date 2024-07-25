@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -19,21 +20,34 @@ var (
 	ErrSessionNotFound     = errors.New("session is not found")
 )
 
+type Claims struct {
+	UserID int    `json:"uid"`
+	Name   string `json:"name"`
+	Role   int    `json:"role"`
+	jwt.StandardClaims
+}
+
 const stateFilePath = "/Users/user/Desktop/Test/client/state.json"
 
 type AuthService struct {
 	client       auth.AuthClient
 	ttl          time.Duration
+	secret       []byte
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
+	claims       Claims
 }
 
-func NewAuthService(client auth.AuthClient, ttl time.Duration) *AuthService {
-	return &AuthService{client: client, ttl: ttl}
+func NewAuthService(client auth.AuthClient, ttl time.Duration, secret []byte) *AuthService {
+	return &AuthService{client: client, ttl: ttl, secret: secret}
 }
 
 func (s *AuthService) Context(ctx context.Context) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, "authorization", fmt.Sprintf("Bearer %v", s.AccessToken))
+}
+
+func (s *AuthService) GetClaims() Claims {
+	return s.claims
 }
 
 func (s *AuthService) Load() error {
@@ -96,6 +110,26 @@ func (s *AuthService) UpdateRefreshToken(ctx context.Context) error {
 	return nil
 }
 
+func (s *AuthService) updateAccessTokenClaims() error {
+	token, err := jwt.ParseWithClaims(s.AccessToken, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected method %v", token.Header["alg"])
+		}
+		return s.secret, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok {
+		return errors.New("invalid claims")
+	}
+
+	s.claims = *claims
+	return nil
+}
+
 func (s *AuthService) UpdateAccessToken(ctx context.Context) error {
 	req := &auth.GetAccessTokenRequest{
 		RefreshToken: s.RefreshToken,
@@ -105,9 +139,9 @@ func (s *AuthService) UpdateAccessToken(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.AccessToken = res.GetAccessToken()
 
-	return nil
+	s.AccessToken = res.GetAccessToken()
+	return s.updateAccessTokenClaims()
 }
 
 func (s *AuthService) RunAccessTokenUpdater(ctx context.Context) {

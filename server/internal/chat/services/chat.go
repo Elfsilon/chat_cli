@@ -65,7 +65,7 @@ func (s *ChatService) listenMessages(ch chan *nats.Msg) {
 		}
 
 		chatID := ChatID(tm.ChatID)
-		message := chat.ChatMessage{
+		message := &chat.ChatMessage{
 			UserName:  tm.UserName,
 			Text:      tm.Text,
 			Timestamp: timestamppb.New(tm.Timestamp),
@@ -74,7 +74,7 @@ func (s *ChatService) listenMessages(ch chan *nats.Msg) {
 		s.mu.Lock()
 		if c, ok := s.chatsMap[chatID]; ok {
 			for _, stream := range c {
-				stream.Send(&message)
+				stream.Send(message)
 			}
 		}
 		s.mu.Unlock()
@@ -83,6 +83,23 @@ func (s *ChatService) listenMessages(ch chan *nats.Msg) {
 
 func (s *ChatService) Create(ctx context.Context, name string, users []int) (int, error) {
 	return s.chatRepo.Create(ctx, name, users)
+}
+
+func (s *ChatService) List(ctx context.Context, userID int64) ([]*chat.ChatInfo, error) {
+	ls, err := s.chatRepo.GetList(ctx, int(userID))
+	if err != nil {
+		return nil, err
+	}
+
+	chats := make([]*chat.ChatInfo, len(ls))
+	for i, ch := range ls {
+		chats[i] = &chat.ChatInfo{
+			Id:    int64(ch.ID),
+			Title: ch.Name,
+		}
+	}
+
+	return chats, nil
 }
 
 func (s *ChatService) IsMember(ctx context.Context, chatID, userID int) (bool, error) {
@@ -119,6 +136,7 @@ func (s *ChatService) connectUser(chatID ChatID, userID UserID, stream MessageSt
 		s.chatsMap[chatID] = make(UserMap)
 	}
 	s.chatsMap[chatID][userID] = stream
+	fmt.Printf("user %v has been connected to the chat %v\n", userID, chatID)
 }
 
 func (s *ChatService) disconnectUser(chatID ChatID, userID UserID) {
@@ -128,7 +146,9 @@ func (s *ChatService) disconnectUser(chatID ChatID, userID UserID) {
 	if _, ok := s.chatsMap[chatID]; !ok {
 		return
 	}
-	s.chatsMap[chatID][userID] = nil
+	delete(s.chatsMap[chatID], userID)
+	fmt.Printf("user %v has been deleted from the chat %v\n", userID, chatID)
+
 }
 
 func (s *ChatService) SendMessage(ctx context.Context, chatID int, userID int, username, text string) error {

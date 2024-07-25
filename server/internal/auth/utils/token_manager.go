@@ -15,14 +15,10 @@ import (
 )
 
 type Claims struct {
-	UserID int `json:"uid"`
-	Role   int `json:"role"`
+	UserID int    `json:"uid"`
+	Name   string `json:"name"`
+	Role   int    `json:"role"`
 	jwt.StandardClaims
-}
-
-var errorClaims = Claims{
-	UserID: -1,
-	Role:   -1,
 }
 
 var (
@@ -59,24 +55,25 @@ func (s *TokenManager) GetAccessTokenClaims(tokenString string) (Claims, error) 
 	})
 
 	if err != nil {
-		return errorClaims, err
+		return Claims{}, err
 	}
 
 	claims, ok := token.Claims.(*Claims)
 	if !ok {
-		return errorClaims, ErrInvalidClaims
+		return Claims{}, ErrInvalidClaims
 	}
 
 	return *claims, nil
 }
 
-func (s *TokenManager) GenerateAccessToken(userID int, role role.Role) (string, error) {
+func (s *TokenManager) GenerateAccessToken(userID int, userName string, role role.Role) (string, error) {
 	issuedAt := time.Now().UTC()
 	expiresAt := issuedAt.Add(s.AccessTokenTTL)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		UserID: userID,
 		Role:   int(role),
+		Name:   userName,
 		StandardClaims: jwt.StandardClaims{
 			IssuedAt:  issuedAt.Unix(),
 			ExpiresAt: expiresAt.Unix(),

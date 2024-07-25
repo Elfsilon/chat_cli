@@ -128,7 +128,7 @@ func (s *AuthService) GetAccessToken(ctx context.Context, refreshToken string) (
 		return "", err
 	}
 
-	accessToken, err := s.tokenManager.GenerateAccessToken(session.UserID, int(user.Role))
+	accessToken, err := s.tokenManager.GenerateAccessToken(session.UserID, user.Name, int(user.Role))
 	if err != nil {
 		return "", nil
 	}

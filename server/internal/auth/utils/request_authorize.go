@@ -37,6 +37,7 @@ func NewRequestAuthorizer(tm *TokenManager) *RequestAuthorizer {
 		"/user.UserService/Delete":  NewMethodOptions().SetProtected(true).SetAllowedRoles(role.Admin),
 
 		"/chat.Chat/Create":      NewMethodOptions().SetProtected(true).SetAllowedRoles(role.Admin),
+		"/chat.Chat/List":        NewMethodOptions().SetProtected(true).SetAllowedRoles(role.User, role.Admin),
 		"/chat.Chat/Conect":      NewMethodOptions().SetProtected(true).SetAllowedRoles(role.User, role.Admin),
 		"/chat.Chat/SendMessage": NewMethodOptions().SetProtected(true).SetAllowedRoles(role.User, role.Admin),
 		"/chat.Chat/Delete":      NewMethodOptions().SetProtected(true).SetAllowedRoles(role.Admin),
@@ -50,18 +51,18 @@ func NewRequestAuthorizer(tm *TokenManager) *RequestAuthorizer {
 
 func (a *RequestAuthorizer) parseTokenHeader(tokens []string, prefix string) (Claims, error) {
 	if len(tokens) == 0 || tokens[0] == "" {
-		return errorClaims, status.Errorf(codes.Unauthenticated, ErrTokenMissing.Error())
+		return Claims{}, status.Errorf(codes.Unauthenticated, ErrTokenMissing.Error())
 	}
 
 	parts := strings.Split(tokens[0], " ")
 	if len(parts) != 2 && parts[0] != prefix {
-		return errorClaims, status.Errorf(codes.Unauthenticated, ErrInvalidStructure.Error())
+		return Claims{}, status.Errorf(codes.Unauthenticated, ErrInvalidStructure.Error())
 	}
 
 	token := parts[1]
 	claims, err := a.tm.GetAccessTokenClaims(token)
 	if err != nil {
-		return errorClaims, status.Errorf(codes.Unauthenticated, err.Error())
+		return Claims{}, status.Errorf(codes.Unauthenticated, err.Error())
 	}
 
 	return claims, nil
@@ -71,20 +72,20 @@ func (a *RequestAuthorizer) parseTokenHeader(tokens []string, prefix string) (Cl
 func (a *RequestAuthorizer) AuthorizeUser(md metadata.MD, method string) (Claims, error) {
 	opt, ok := a.options[method]
 	if !ok {
-		return errorClaims, status.Errorf(codes.NotFound, ErrMethodNotFound.Error())
+		return Claims{}, status.Errorf(codes.NotFound, ErrMethodNotFound.Error())
 	}
 
 	if !opt.protected {
-		return errorClaims, nil
+		return Claims{}, nil
 	}
 
 	claims, err := a.parseTokenHeader(md["authorization"], "Bearer")
 	if err != nil {
-		return errorClaims, err
+		return Claims{}, err
 	}
 
 	if !opt.IsAllowedForRole(claims.Role) {
-		return errorClaims, status.Errorf(codes.PermissionDenied, ErrNoPermission.Error())
+		return Claims{}, status.Errorf(codes.PermissionDenied, ErrNoPermission.Error())
 	}
 
 	return claims, nil

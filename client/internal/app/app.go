@@ -1,19 +1,19 @@
 package app
 
 import (
-	"bufio"
+	ctr "chat_cli/internal/app/controllers"
 	"chat_cli/internal/app/gen/auth"
+	"chat_cli/internal/app/gen/chat"
 	"chat_cli/internal/app/gen/user"
 	intc "chat_cli/internal/app/interceptors"
 	"chat_cli/internal/app/models"
 	"chat_cli/internal/app/services"
+	"chat_cli/internal/app/utils/console"
 	"context"
 	"errors"
 	"fmt"
 	"log"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
@@ -23,9 +23,6 @@ import (
 type App struct {
 	config models.Config
 	log    *log.Logger
-	auths  *services.AuthService
-	authc  auth.AuthClient
-	userc  user.UserServiceClient
 }
 
 func New() *App {
@@ -34,17 +31,7 @@ func New() *App {
 
 func PromptString(message string) string {
 	fmt.Println(message)
-	text, r := "", bufio.NewReader(os.Stdin)
-	for {
-		str, err := r.ReadString('\n')
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		text = str
-		break
-	}
-	return strings.ReplaceAll(text, "\n", "")
+	return console.ReadLine()
 }
 
 func (a *App) GetClientConn(url string, opts ...grpc.DialOption) *grpc.ClientConn {
@@ -58,86 +45,149 @@ func (a *App) GetClientConn(url string, opts ...grpc.DialOption) *grpc.ClientCon
 	return c
 }
 
-func (a *App) PromptLogin(ctx context.Context) error {
+func (a *App) PromptLogin(ctx context.Context, s *services.AuthService) error {
 	fmt.Println("-- Authorization --")
 	name, password := PromptString("Name:"), PromptString("Password")
-	return a.auths.Login(ctx, name, password)
+	return s.Login(ctx, name, password)
 }
 
-func (a *App) Authorize(ctx context.Context) {
-	if err := a.auths.UpdateRefreshToken(ctx); err != nil {
+func (a *App) Authorize(ctx context.Context, s *services.AuthService) {
+	if err := s.UpdateRefreshToken(ctx); err != nil {
 		if errors.Is(err, services.ErrTokenExpiredOrEmpty) || errors.Is(err, services.ErrSessionNotFound) {
-			for err := err; err != nil; err = a.PromptLogin(ctx) {
+			for err := err; err != nil; err = a.PromptLogin(ctx, s) {
 				a.log.Println(err)
 			}
 		} else {
 			a.log.Fatal(err)
 		}
 	}
-	a.auths.UpdateAccessToken(ctx)
-	go a.auths.RunAccessTokenUpdater(ctx)
+	if err := s.UpdateAccessToken(ctx); err != nil {
+		a.log.Fatal(err)
+	}
+	go s.RunAccessTokenUpdater(ctx)
 }
 
-func (a *App) Run1() {
+func (a *App) Run() {
 	a.log = log.Default()
 	a.LoadConfig()
 
-	a.authc = auth.NewAuthClient(a.GetClientConn(a.config.AuthServiceUrl))
-	tokenProvider := intc.NewTokenProvider(a.auths)
+	authClient := auth.NewAuthClient(a.GetClientConn(a.config.AuthServiceUrl))
+	authService := services.NewAuthService(authClient, a.config.AccessTokenTTL, a.config.JwtSecret)
 
+	if err := authService.Load(); err != nil {
+		a.log.Printf("failed load auth state from file: %v", err)
+	}
+	a.Authorize(context.Background(), authService)
+	authService.Save()
+
+	tokenProvider := intc.NewTokenProvider(authService)
 	secureOpts := []grpc.DialOption{
 		grpc.WithUnaryInterceptor(tokenProvider.UnaryInterceptor),
 		grpc.WithStreamInterceptor(tokenProvider.StreamInterceptor),
 	}
+	userClient := user.NewUserServiceClient(a.GetClientConn(a.config.UserServiceUrl, secureOpts...))
+	chatClient := chat.NewChatClient(a.GetClientConn(a.config.ChatServiceUrl, secureOpts...))
 
-	a.userc = user.NewUserServiceClient(a.GetClientConn(a.config.UserServiceUrl, secureOpts...))
-	// chatc = auth.NewAuthClient(a.GetClientConn(a.config.ChatServiceUrl, secureOpts...))
+	chatService := services.NewChatService(chatClient)
+	chatController := ctr.NewChatController(authService, chatService)
 
-	auths := services.NewAuthService(a.authc, a.config.AccessTokenTTL)
-	if err := auths.Load(); err != nil {
-		a.log.Printf("failed load auth state from file: %v", err)
-	}
+	userService := services.NewUserService(userClient)
+	userController := ctr.NewUserController(userService)
 
-	a.Authorize(context.Background())
-	auths.Save()
-
-	a.log.Println("Authorization completed")
-
-	time.Sleep(time.Hour)
-}
-
-// ---------
-
-func JoinChat(cCtx *cli.Context) error {
-	fmt.Println("added task: ", cCtx.Args().First())
-	return nil
-}
-
-func (a *App) Run() {
 	app := &cli.App{
-		Name:  "chacli",
+		Name:  "chater",
 		Usage: "",
 		Commands: []*cli.Command{
 			{
-				Name:     "join",
-				Aliases:  []string{"j"},
+				Name:     "chat",
 				Category: "Chat",
 				Usage:    "",
-				Action:   JoinChat,
+				Subcommands: []*cli.Command{
+					{
+						Name:     "create",
+						Aliases:  []string{"c"},
+						Category: "Chat",
+						Usage:    "",
+						Flags: []cli.Flag{
+							&cli.Int64SliceFlag{
+								Name:    "users",
+								Aliases: []string{"u"},
+								Value:   cli.NewInt64Slice(),
+								Usage:   "u",
+							},
+						},
+						Action: chatController.Create,
+					},
+					{
+						Name:     "delete",
+						Aliases:  []string{"d"},
+						Category: "Chat",
+						Usage:    "",
+						Action:   chatController.Delete,
+					},
+					{
+						Name:     "connect",
+						Category: "Chat",
+						Usage:    "",
+						Action:   chatController.Connect,
+					},
+					{
+						Name:     "list",
+						Aliases:  []string{"ls"},
+						Category: "Chat",
+						Usage:    "",
+						Action:   chatController.List,
+					},
+				},
 			},
 			{
-				Name:     "create",
-				Aliases:  []string{"c"},
-				Category: "Chat",
+				Name:     "user",
+				Category: "User",
 				Usage:    "",
-				Action:   JoinChat,
-			},
-			{
-				Name:     "delete",
-				Aliases:  []string{"d"},
-				Category: "Chat",
-				Usage:    "",
-				Action:   JoinChat,
+				Subcommands: []*cli.Command{
+					{
+						Name:     "create",
+						Aliases:  []string{"c"},
+						Category: "User",
+						Usage:    "",
+						Flags: []cli.Flag{
+							&cli.StringFlag{Name: "role"},
+						},
+						Action: userController.Create,
+					},
+					{
+						Name:     "get",
+						Aliases:  []string{"g"},
+						Category: "User",
+						Usage:    "",
+						Action:   userController.Get,
+					},
+					{
+						Name:     "list",
+						Aliases:  []string{"ls"},
+						Category: "User",
+						Usage:    "",
+						Action:   userController.List,
+					},
+					{
+						Name:     "update",
+						Aliases:  []string{"u"},
+						Category: "User",
+						Usage:    "",
+						Flags: []cli.Flag{
+							&cli.StringFlag{Name: "name"},
+							&cli.StringFlag{Name: "email"},
+						},
+						Action: userController.Update,
+					},
+					{
+						Name:     "delete",
+						Aliases:  []string{"d"},
+						Category: "User",
+						Usage:    "",
+						Action:   userController.Delete,
+					},
+				},
 			},
 		},
 	}

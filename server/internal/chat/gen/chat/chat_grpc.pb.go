@@ -24,6 +24,7 @@ const (
 	Chat_Conect_FullMethodName      = "/chat.Chat/Conect"
 	Chat_SendMessage_FullMethodName = "/chat.Chat/SendMessage"
 	Chat_Delete_FullMethodName      = "/chat.Chat/Delete"
+	Chat_List_FullMethodName        = "/chat.Chat/List"
 )
 
 // ChatClient is the client API for Chat service.
@@ -35,6 +36,7 @@ type ChatClient interface {
 	Conect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (Chat_ConectClient, error)
 	SendMessage(ctx context.Context, in *SendRequest, opts ...grpc.CallOption) (*SendResponse, error)
 	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
+	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error)
 }
 
 type chatClient struct {
@@ -118,6 +120,16 @@ func (c *chatClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc
 	return out, nil
 }
 
+func (c *chatClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListResponse)
+	err := c.cc.Invoke(ctx, Chat_List_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServer is the server API for Chat service.
 // All implementations must embed UnimplementedChatServer
 // for forward compatibility
@@ -127,6 +139,7 @@ type ChatServer interface {
 	Conect(*ConnectRequest, Chat_ConectServer) error
 	SendMessage(context.Context, *SendRequest) (*SendResponse, error)
 	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
+	List(context.Context, *ListRequest) (*ListResponse, error)
 	mustEmbedUnimplementedChatServer()
 }
 
@@ -148,6 +161,9 @@ func (UnimplementedChatServer) SendMessage(context.Context, *SendRequest) (*Send
 }
 func (UnimplementedChatServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
+}
+func (UnimplementedChatServer) List(context.Context, *ListRequest) (*ListResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
 }
 func (UnimplementedChatServer) mustEmbedUnimplementedChatServer() {}
 
@@ -255,6 +271,24 @@ func _Chat_Delete_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Chat_List_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServer).List(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Chat_List_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServer).List(ctx, req.(*ListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Chat_ServiceDesc is the grpc.ServiceDesc for Chat service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -277,6 +311,10 @@ var Chat_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Delete",
 			Handler:    _Chat_Delete_Handler,
+		},
+		{
+			MethodName: "List",
+			Handler:    _Chat_List_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

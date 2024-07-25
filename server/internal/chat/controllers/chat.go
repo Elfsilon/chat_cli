@@ -50,6 +50,21 @@ func (s *ChatController) Create(ctx context.Context, req *chat.CreateRequest) (*
 	return response, nil
 }
 
+func (s *ChatController) List(ctx context.Context, req *chat.ListRequest) (*chat.ListResponse, error) {
+	userID, err := ctxutil.GetValue[int64](ctx, ctxutil.UserID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	ls, err := s.chatService.List(ctx, userID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, err.Error())
+	}
+
+	res := &chat.ListResponse{Chats: ls}
+	return res, nil
+}
+
 func (s *ChatController) Conect(req *chat.ConnectRequest, stream chat.Chat_ConectServer) error {
 	userID, err := ctxutil.GetValue[int64](stream.Context(), ctxutil.UserID)
 	if err != nil {
