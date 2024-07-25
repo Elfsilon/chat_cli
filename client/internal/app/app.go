@@ -9,10 +9,10 @@ import (
 	"chat_cli/internal/app/models"
 	"chat_cli/internal/app/services"
 	"chat_cli/internal/app/utils/console"
+	"chat_cli/internal/app/utils/styled"
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -22,7 +22,6 @@ import (
 
 type App struct {
 	config models.Config
-	log    *log.Logger
 }
 
 func New() *App {
@@ -30,7 +29,7 @@ func New() *App {
 }
 
 func PromptString(message string) string {
-	fmt.Println(message)
+	fmt.Print(message)
 	return console.ReadLine()
 }
 
@@ -40,45 +39,44 @@ func (a *App) GetClientConn(url string, opts ...grpc.DialOption) *grpc.ClientCon
 	}
 	c, err := grpc.NewClient(url, append(defaultOpts, opts...)...)
 	if err != nil {
-		a.log.Fatal(err)
+		styled.Fatalf(err.Error())
 	}
 	return c
 }
 
 func (a *App) PromptLogin(ctx context.Context, s *services.AuthService) error {
-	fmt.Println("-- Authorization --")
-	name, password := PromptString("Name:"), PromptString("Password")
+	name, password := "a1", "kkk"
+	// name, password := PromptString("Name: "), PromptString("Password: ")
 	return s.Login(ctx, name, password)
 }
 
 func (a *App) Authorize(ctx context.Context, s *services.AuthService) {
 	if err := s.UpdateRefreshToken(ctx); err != nil {
 		if errors.Is(err, services.ErrTokenExpiredOrEmpty) || errors.Is(err, services.ErrSessionNotFound) {
-			for err := err; err != nil; err = a.PromptLogin(ctx, s) {
-				a.log.Println(err)
+			for lerr := a.PromptLogin(ctx, s); lerr != nil; lerr = a.PromptLogin(ctx, s) {
+				styled.Errorf(lerr.Error())
 			}
 		} else {
-			a.log.Fatal(err)
+			styled.Fatalf(err.Error())
 		}
 	}
 	if err := s.UpdateAccessToken(ctx); err != nil {
-		a.log.Fatal(err)
+		styled.Fatalf(err.Error())
 	}
 	go s.RunAccessTokenUpdater(ctx)
 }
 
 func (a *App) Run() {
-	a.log = log.Default()
 	a.LoadConfig()
 
 	authClient := auth.NewAuthClient(a.GetClientConn(a.config.AuthServiceUrl))
 	authService := services.NewAuthService(authClient, a.config.AccessTokenTTL, a.config.JwtSecret)
 
-	if err := authService.Load(); err != nil {
-		a.log.Printf("failed load auth state from file: %v", err)
-	}
+	// if err := authService.Load(); err != nil {
+	// 	a.log.Printf("failed load auth state from file: %v", err)
+	// }
 	a.Authorize(context.Background(), authService)
-	authService.Save()
+	// authService.Save()
 
 	tokenProvider := intc.NewTokenProvider(authService)
 	secureOpts := []grpc.DialOption{
@@ -193,6 +191,6 @@ func (a *App) Run() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
+		styled.Fatalf(err.Error())
 	}
 }

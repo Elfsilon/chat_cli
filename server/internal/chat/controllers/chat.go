@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"server/internal/chat/gen/chat"
 	"server/internal/chat/services"
 	ctxutil "server/pkg/utils/context_utils"
@@ -103,7 +104,9 @@ func (s *ChatController) SendMessage(ctx context.Context, req *chat.SendRequest)
 		return nil, status.Error(codes.PermissionDenied, ErrSendingFailedNotAMember.Error())
 	}
 
-	err = s.chatService.SendMessage(ctx, chatID, int(userID), m.UserName, m.Text)
+	fmt.Printf("Send called, code = %v\n", m.GetColor())
+
+	err = s.chatService.SendMessage(ctx, chatID, int(userID), m.GetUserName(), m.GetText(), m.GetColor())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

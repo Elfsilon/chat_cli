@@ -67,7 +67,6 @@ func (s *AuthService) Save() error {
 }
 
 func (s *AuthService) Login(ctx context.Context, name, password string) error {
-	fmt.Printf("Login called with name: %v, password: %v\n", name, password)
 	req := &auth.LoginRequest{
 		Name:     name,
 		Password: password,

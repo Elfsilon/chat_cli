@@ -8,10 +8,11 @@ type ChatInfo struct {
 }
 
 func (c *ChatInfo) String() string {
-	return fmt.Sprintf("% 2v: %v", c.ID, c.Title)
+	return fmt.Sprintf("id: %03v | name: %v", c.ID, c.Title)
 }
 
 type ChatMessage struct {
-	Author string
-	Text   string
+	Author    string
+	Text      string
+	ColorCode int32
 }

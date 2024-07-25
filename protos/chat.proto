@@ -26,7 +26,8 @@ message ChatInfo {
 message ChatMessage {
   string userName = 2;
   string text = 3;
-  google.protobuf.Timestamp timestamp = 4;
+  int32 color = 4;
+  google.protobuf.Timestamp timestamp = 5;
 }
 
 message CreateRequest {

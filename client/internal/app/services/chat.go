@@ -28,40 +28,44 @@ func (s *ChatService) Create(ctx context.Context, title string, users []int64) (
 	return res.GetId(), nil
 }
 
-func (s *ChatService) Connect(ctx context.Context, chatID int64) (<-chan models.ChatMessage, error) {
+func (s *ChatService) Connect(ctx context.Context, chatID int64) (<-chan models.ChatMessage, <-chan error, error) {
 	req := &chat.ConnectRequest{ChatID: chatID}
 	stream, err := s.client.Conect(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ch := make(chan models.ChatMessage)
+	errch := make(chan error, 1)
+
 	go func() {
 		for {
 			if ctx.Err() != nil || stream.Context().Err() != nil {
-				fmt.Printf("context error: %v\n", err)
+				errch <- fmt.Errorf("context error: %v", err)
 				break
 			}
 
 			m, err := stream.Recv()
 			if err == io.EOF {
-				fmt.Printf("EOF error: %v\n", err)
+				errch <- fmt.Errorf("EOF error: %v", err)
 				break
 			}
 			if err != nil {
-				fmt.Printf("reading the stream message error: %v\n", err)
+				errch <- fmt.Errorf("reading the stream message error: %v", err)
 				break
 			}
 
 			ch <- models.ChatMessage{
-				Author: m.GetUserName(),
-				Text:   m.GetText(),
+				Author:    m.GetUserName(),
+				Text:      m.GetText(),
+				ColorCode: m.GetColor(),
 			}
 		}
 		close(ch)
+		close(errch)
 	}()
 
-	return ch, nil
+	return ch, errch, nil
 }
 
 func (s *ChatService) List(ctx context.Context) ([]models.ChatInfo, error) {
@@ -94,6 +98,7 @@ func (s *ChatService) Send(ctx context.Context, chatID int64, message models.Cha
 		Message: &chat.ChatMessage{
 			UserName:  message.Author,
 			Text:      message.Text,
+			Color:     message.ColorCode,
 			Timestamp: timestamppb.Now(),
 		},
 	}

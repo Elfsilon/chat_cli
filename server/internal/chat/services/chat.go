@@ -25,6 +25,7 @@ type TopicMessage struct {
 	ChatID    int       `json:"chat_id"`
 	UserName  string    `json:"name"`
 	Text      string    `json:"text"`
+	Color     int32     `json:"color"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -68,8 +69,12 @@ func (s *ChatService) listenMessages(ch chan *nats.Msg) {
 		message := &chat.ChatMessage{
 			UserName:  tm.UserName,
 			Text:      tm.Text,
+			Color:     tm.Color,
 			Timestamp: timestamppb.New(tm.Timestamp),
 		}
+
+		fmt.Printf("Got topic message , code = %v\n", tm.Color)
+		fmt.Printf("Converted to message , code = %v\n", message.Color)
 
 		s.mu.Lock()
 		if c, ok := s.chatsMap[chatID]; ok {
@@ -120,7 +125,9 @@ func (s *ChatService) IsMember(ctx context.Context, chatID, userID int) (bool, e
 func (s *ChatService) Connect(ctx context.Context, chatID, userID int, stream MessageStream) error {
 	cid, uid := ChatID(chatID), UserID(userID)
 
-	s.connectUser(cid, uid, stream)
+	if err := s.connectUser(cid, uid, stream); err != nil {
+		return err
+	}
 	defer s.disconnectUser(cid, uid)
 
 	<-stream.Context().Done()
@@ -128,15 +135,21 @@ func (s *ChatService) Connect(ctx context.Context, chatID, userID int, stream Me
 	return nil
 }
 
-func (s *ChatService) connectUser(chatID ChatID, userID UserID, stream MessageStream) {
+func (s *ChatService) connectUser(chatID ChatID, userID UserID, stream MessageStream) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.chatsMap[chatID]; !ok {
 		s.chatsMap[chatID] = make(UserMap)
 	}
+
+	if _, ok := s.chatsMap[chatID][userID]; ok {
+		return fmt.Errorf("user %v is already connected to the chat %v", userID, chatID)
+	}
+
 	s.chatsMap[chatID][userID] = stream
 	fmt.Printf("user %v has been connected to the chat %v\n", userID, chatID)
+	return nil
 }
 
 func (s *ChatService) disconnectUser(chatID ChatID, userID UserID) {
@@ -151,7 +164,7 @@ func (s *ChatService) disconnectUser(chatID ChatID, userID UserID) {
 
 }
 
-func (s *ChatService) SendMessage(ctx context.Context, chatID int, userID int, username, text string) error {
+func (s *ChatService) SendMessage(ctx context.Context, chatID int, userID int, username, text string, color int32) error {
 	err := s.chatRepo.AddMessage(ctx, chatID, userID, username, text)
 	if err != nil {
 		return err
@@ -161,6 +174,7 @@ func (s *ChatService) SendMessage(ctx context.Context, chatID int, userID int, u
 		ChatID:    chatID,
 		UserName:  username,
 		Text:      text,
+		Color:     color,
 		Timestamp: time.Now(),
 	}
 
