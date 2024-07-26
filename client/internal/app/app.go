@@ -45,7 +45,8 @@ func (a *App) GetClientConn(url string, opts ...grpc.DialOption) *grpc.ClientCon
 }
 
 func (a *App) PromptLogin(ctx context.Context, s *services.AuthService) error {
-	name, password := PromptString("Name: "), PromptString("Password: ")
+	name, password := "u1", "kkk"
+	// name, password := PromptString("Name: "), PromptString("Password: ")
 	return s.Login(ctx, name, password)
 }
 
@@ -71,11 +72,11 @@ func (a *App) Run() {
 	authClient := auth.NewAuthClient(a.GetClientConn(a.config.AuthServiceUrl))
 	authService := services.NewAuthService(authClient, a.config.AccessTokenTTL, a.config.JwtSecret)
 
-	if err := authService.Load(); err != nil {
-		styled.Errorf("failed load auth state from file: %v", err)
-	}
+	// if err := authService.Load(); err != nil {
+	// 	styled.Errorf("failed load auth state from file: %v", err)
+	// }
 	a.Authorize(context.Background(), authService)
-	authService.Save()
+	// authService.Save()
 
 	tokenProvider := intc.NewTokenProvider(authService)
 	secureOpts := []grpc.DialOption{

@@ -9,7 +9,7 @@ import "google/protobuf/timestamp.proto";
 service Chat {
   rpc HealthCheck(HealthRequest) returns (HealthResponse) {}
   rpc Create(CreateRequest) returns (CreateResponse) {}
-  rpc Conect(ConnectRequest) returns (stream ChatMessage) {}
+  rpc Conect(ConnectRequest) returns (stream ChatEvent) {}
   rpc SendMessage(SendRequest) returns (SendResponse) {}
   rpc Delete(DeleteRequest) returns (DeleteResponse) {}
   rpc List(ListRequest) returns (ListResponse) {}
@@ -23,11 +23,18 @@ message ChatInfo {
   string title = 2;
 }
 
-message ChatMessage {
-  string userName = 2;
-  string text = 3;
-  int32 color = 4;
-  google.protobuf.Timestamp timestamp = 5;
+enum EventType {
+  Message = 0;
+  Info = 1;
+}
+
+message ChatEvent {
+  EventType type = 1;
+  int64 userID = 2;
+  string userName = 3;
+  string text = 4;
+  int32 color = 5;
+  google.protobuf.Timestamp timestamp = 6;
 }
 
 message CreateRequest {
@@ -45,7 +52,7 @@ message ConnectRequest {
 
 message SendRequest {
   int64 chatID = 1;
-  ChatMessage message = 2;
+  ChatEvent message = 2;
 }
 
 message SendResponse {}

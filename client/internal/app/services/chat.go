@@ -28,14 +28,14 @@ func (s *ChatService) Create(ctx context.Context, title string, users []int64) (
 	return res.GetId(), nil
 }
 
-func (s *ChatService) Connect(ctx context.Context, chatID int64) (<-chan models.ChatMessage, <-chan error, error) {
+func (s *ChatService) Connect(ctx context.Context, chatID int64) (<-chan models.ChatEvent, <-chan error, error) {
 	req := &chat.ConnectRequest{ChatID: chatID}
 	stream, err := s.client.Conect(ctx, req)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ch := make(chan models.ChatMessage)
+	ch := make(chan models.ChatEvent)
 	errch := make(chan error, 1)
 
 	go func() {
@@ -55,7 +55,9 @@ func (s *ChatService) Connect(ctx context.Context, chatID int64) (<-chan models.
 				break
 			}
 
-			ch <- models.ChatMessage{
+			ch <- models.ChatEvent{
+				Type:      m.GetType(),
+				UserID:    m.GetUserID(),
 				Author:    m.GetUserName(),
 				Text:      m.GetText(),
 				ColorCode: m.GetColor(),
@@ -92,10 +94,12 @@ func (s *ChatService) Delete(ctx context.Context, id int64) error {
 	return err
 }
 
-func (s *ChatService) Send(ctx context.Context, chatID int64, message models.ChatMessage) error {
+func (s *ChatService) Send(ctx context.Context, chatID int64, message models.ChatEvent) error {
 	req := &chat.SendRequest{
 		ChatID: chatID,
-		Message: &chat.ChatMessage{
+		Message: &chat.ChatEvent{
+			Type:      chat.EventType_Message,
+			UserID:    message.UserID,
 			UserName:  message.Author,
 			Text:      message.Text,
 			Color:     message.ColorCode,

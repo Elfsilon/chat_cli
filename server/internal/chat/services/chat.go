@@ -21,8 +21,10 @@ type ChatMap map[ChatID]UserMap
 
 const chatMessagesTopic = "chat_messages"
 
-type TopicMessage struct {
+type TopicEvent struct {
+	Type      int32     `json:"type"`
 	ChatID    int       `json:"chat_id"`
+	UserID    int       `json:"user_id"`
 	UserName  string    `json:"name"`
 	Text      string    `json:"text"`
 	Color     int32     `json:"color"`
@@ -59,22 +61,21 @@ func (s *ChatService) Init() (func() error, error) {
 
 func (s *ChatService) listenMessages(ch chan *nats.Msg) {
 	for msg := range ch {
-		var tm TopicMessage
+		var tm TopicEvent
 		if err := json.Unmarshal(msg.Data, &tm); err != nil {
 			fmt.Printf("failed to unmarshal received message: %v\n", err)
 			continue
 		}
 
 		chatID := ChatID(tm.ChatID)
-		message := &chat.ChatMessage{
+		message := &chat.ChatEvent{
+			UserID:    int64(tm.UserID),
 			UserName:  tm.UserName,
 			Text:      tm.Text,
 			Color:     tm.Color,
+			Type:      chat.EventType(tm.Type),
 			Timestamp: timestamppb.New(tm.Timestamp),
 		}
-
-		fmt.Printf("Got topic message , code = %v\n", tm.Color)
-		fmt.Printf("Converted to message , code = %v\n", message.Color)
 
 		s.mu.Lock()
 		if c, ok := s.chatsMap[chatID]; ok {
@@ -128,7 +129,11 @@ func (s *ChatService) Connect(ctx context.Context, chatID, userID int, stream Me
 	if err := s.connectUser(cid, uid, stream); err != nil {
 		return err
 	}
-	defer s.disconnectUser(cid, uid)
+	s.sendEvent(int(chatID), userID, chat.EventType_Info, fmt.Sprintf("user %v has been connected", userID))
+	defer func() {
+		s.disconnectUser(cid, uid)
+		s.sendEvent(int(chatID), userID, chat.EventType_Info, fmt.Sprintf("user %v has been disconnected", userID))
+	}()
 
 	<-stream.Context().Done()
 
@@ -161,7 +166,6 @@ func (s *ChatService) disconnectUser(chatID ChatID, userID UserID) {
 	}
 	delete(s.chatsMap[chatID], userID)
 	fmt.Printf("user %v has been deleted from the chat %v\n", userID, chatID)
-
 }
 
 func (s *ChatService) SendMessage(ctx context.Context, chatID int, userID int, username, text string, color int32) error {
@@ -170,19 +174,34 @@ func (s *ChatService) SendMessage(ctx context.Context, chatID int, userID int, u
 		return err
 	}
 
-	msg := TopicMessage{
+	return s.publish(TopicEvent{
 		ChatID:    chatID,
+		UserID:    userID,
 		UserName:  username,
 		Text:      text,
 		Color:     color,
+		Type:      int32(chat.EventType_Message),
 		Timestamp: time.Now(),
-	}
+	})
+}
 
-	msgBytes, err := json.Marshal(&msg)
+func (s *ChatService) sendEvent(chatID, userID int, t chat.EventType, text string) error {
+	return s.publish(TopicEvent{
+		ChatID:    chatID,
+		UserID:    userID,
+		UserName:  "",
+		Text:      text,
+		Color:     0,
+		Type:      int32(t),
+		Timestamp: time.Now(),
+	})
+}
+
+func (s *ChatService) publish(event TopicEvent) error {
+	msgBytes, err := json.Marshal(&event)
 	if err != nil {
 		return err
 	}
-
 	return s.nc.Publish(chatMessagesTopic, msgBytes)
 }
 

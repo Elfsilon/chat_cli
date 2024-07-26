@@ -1,6 +1,7 @@
 package ctr
 
 import (
+	"chat_cli/internal/app/gen/chat"
 	"chat_cli/internal/app/models"
 	"chat_cli/internal/app/services"
 	"chat_cli/internal/app/utils/console"
@@ -41,7 +42,7 @@ func (c *ChatController) Create(cCtx *cli.Context) error {
 }
 
 func (c *ChatController) Connect(cCtx *cli.Context) error {
-	author := c.auth.GetClaims().Name
+	claims := c.auth.GetClaims()
 
 	rawID := cCtx.Args().Get(0)
 	chatID, err := strconv.Atoi(rawID)
@@ -49,17 +50,25 @@ func (c *ChatController) Connect(cCtx *cli.Context) error {
 		return styled.Errorf("failed converting id (%v) to int: %v", rawID, err)
 	}
 
-	messages, errch, err := c.s.Connect(cCtx.Context, int64(chatID))
+	events, errch, err := c.s.Connect(cCtx.Context, int64(chatID))
 	if err != nil {
 		return styled.Errorf(err.Error())
 	}
 
 	styled.Successf("Connected to the chat %v\n\n", chatID)
 	go func() {
-		for message := range messages {
-			authorColor := styled.ColorFromCode(message.ColorCode)
-			author := styled.New(message.Author).WithStyle(authorColor).Build()
-			fmt.Printf("%v: %v\n", author, message.Text)
+		for event := range events {
+			fmt.Printf("\033[0G\033[K")
+			if event.Type == chat.EventType_Info {
+				if event.UserID != int64(claims.UserID) {
+					text := styled.New(event.Text).WithStyle(styled.Blue).Build()
+					fmt.Println(text)
+				}
+			} else {
+				authorColor := styled.ColorFromCode(event.ColorCode)
+				author := styled.New(event.Author).WithStyle(authorColor).Build()
+				fmt.Printf("%v: %v\n", author, event.Text)
+			}
 		}
 	}()
 
@@ -77,10 +86,13 @@ func (c *ChatController) Connect(cCtx *cli.Context) error {
 		select {
 		case text := <-input:
 			if !strings.HasPrefix(text, "/") {
-				c.s.Send(cCtx.Context, int64(chatID), models.ChatMessage{
-					Author:    author,
+				c.s.Send(cCtx.Context, int64(chatID), models.ChatEvent{
+					UserID:    int64(claims.UserID),
+					Author:    claims.Name,
 					Text:      text,
 					ColorCode: colorCode,
+
+					Type: chat.EventType_Message,
 				})
 			} else if text == "/q" || text == "/quit" {
 				fmt.Printf("\n\n")
@@ -92,7 +104,6 @@ func (c *ChatController) Connect(cCtx *cli.Context) error {
 			return err
 		}
 	}
-
 }
 
 func (c *ChatController) Delete(cCtx *cli.Context) error {
