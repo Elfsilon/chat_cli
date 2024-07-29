@@ -10,11 +10,11 @@ import (
 )
 
 type AuthController struct {
-	authService *services.AuthService
+	authService services.Auth
 	auth.UnimplementedAuthServer
 }
 
-func NewAuthController(as *services.AuthService) *AuthController {
+func NewAuthController(as services.Auth) *AuthController {
 	return &AuthController{
 		authService: as,
 	}
@@ -76,6 +76,7 @@ func (c *AuthController) GetServiceToken(ctx context.Context, req *auth.GetServi
 	return reponse, nil
 }
 
+// Returning error is always nil - to fit grpc interface
 func (c *AuthController) CheckResource(ctx context.Context, req *auth.CheckResourceRequest) (*auth.CheckResourceResponse, error) {
 	userID, err := c.authService.CheckAccess(ctx, req.GetFullMethod())
 

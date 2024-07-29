@@ -22,10 +22,19 @@ var (
 	ErrMetadataMissing  = errors.New("metadata is missing")
 )
 
+type Auth interface {
+	CheckAccess(ctx context.Context, method string) (int, error)
+	CheckToken(ctx context.Context, token string) error
+	Login(ctx context.Context, name string, password string) (*int, string, error)
+	GetRefreshToken(ctx context.Context, oldRefreshToken string) (string, error)
+	GetAccessToken(ctx context.Context, refreshToken string) (string, error)
+	GetServiceToken(ctx context.Context, secretHash string) (string, error)
+}
+
 type AuthService struct {
 	serviceSecret string
 	uclient       user.UserServiceClient
-	sessionRepo   *repos.SessionRepo
+	sessionRepo   repos.Session
 	tokenManager  *utils.TokenManager
 	tokenUpdater  *utils.TokenUpdater
 	authorizer    *utils.RequestAuthorizer
@@ -34,7 +43,7 @@ type AuthService struct {
 func NewAuthService(
 	serviceSecret string,
 	us user.UserServiceClient,
-	sr *repos.SessionRepo,
+	sr repos.Session,
 	tm *utils.TokenManager,
 	tu *utils.TokenUpdater,
 	ra *utils.RequestAuthorizer,
@@ -75,7 +84,6 @@ func (s *AuthService) CheckToken(ctx context.Context, token string) error {
 func (s *AuthService) Login(ctx context.Context, name string, password string) (*int, string, error) {
 	ctx = s.tokenUpdater.Context(ctx)
 	req := &user.GetRequest{Username: name}
-
 	u, err := s.uclient.Get(ctx, req)
 	if err != nil {
 		return nil, "", err

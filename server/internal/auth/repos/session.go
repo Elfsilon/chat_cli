@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+type Session interface {
+	Create(ctx context.Context, userID int, refreshToken string, expiresAt time.Time) (int, error)
+	GetByID(ctx context.Context, id int) (*ent.Session, error)
+	GetByRefreshToken(ctx context.Context, refreshToken string) (*ent.Session, error)
+	UpdateRefreshToken(ctx context.Context, id int, refreshToken string, expiredAt time.Time) error
+}
+
 type SessionRepo struct {
 	client *ent.Client
 }

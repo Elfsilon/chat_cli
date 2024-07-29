@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"server/pkg/utils/role"
 	"strings"
 
@@ -71,9 +72,12 @@ func (a *RequestAuthorizer) parseTokenHeader(tokens []string, prefix string) (Cl
 // "authorization: Bearer <token>" - must be provided with metadata if method is protected
 func (a *RequestAuthorizer) AuthorizeUser(md metadata.MD, method string) (Claims, error) {
 	opt, ok := a.options[method]
+	fmt.Println("HEREHERE")
 	if !ok {
 		return Claims{}, status.Errorf(codes.NotFound, ErrMethodNotFound.Error())
 	}
+
+	fmt.Println("HERE")
 
 	if !opt.protected {
 		return Claims{}, nil
@@ -81,8 +85,11 @@ func (a *RequestAuthorizer) AuthorizeUser(md metadata.MD, method string) (Claims
 
 	claims, err := a.parseTokenHeader(md["authorization"], "Bearer")
 	if err != nil {
+		fmt.Println("HERE2")
 		return Claims{}, err
 	}
+
+	fmt.Println(claims)
 
 	if !opt.IsAllowedForRole(claims.Role) {
 		return Claims{}, status.Errorf(codes.PermissionDenied, ErrNoPermission.Error())
