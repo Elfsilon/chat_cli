@@ -83,6 +83,8 @@ func (s *ChatController) Conect(req *chat.ConnectRequest, stream chat.Chat_Conec
 		return status.Error(codes.PermissionDenied, ErrConnectionFailedNotAMember.Error())
 	}
 
+	fmt.Println("HERE")
+
 	return s.chatService.Connect(stream.Context(), chatID, int(userID), stream)
 }
 

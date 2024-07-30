@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"server/internal/chat/broker"
 	"server/internal/chat/gen/chat"
 	"server/internal/chat/repos"
 	"sync"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -32,15 +32,15 @@ type TopicEvent struct {
 }
 
 type ChatService struct {
-	nc       *nats.Conn
-	chatRepo *repos.ChatRepo
+	broker   broker.MessageBroker
+	chatRepo repos.Chat
 	chatsMap ChatMap
 	mu       sync.Mutex
 }
 
-func NewChatService(nc *nats.Conn, cr *repos.ChatRepo) *ChatService {
+func NewChatService(b broker.MessageBroker, cr repos.Chat) *ChatService {
 	return &ChatService{
-		nc:       nc,
+		broker:   b,
 		chatRepo: cr,
 		chatsMap: make(ChatMap),
 		mu:       sync.Mutex{},
@@ -48,21 +48,20 @@ func NewChatService(nc *nats.Conn, cr *repos.ChatRepo) *ChatService {
 }
 
 func (s *ChatService) Init() (func() error, error) {
-	ch := make(chan *nats.Msg)
-	sub, err := s.nc.ChanSubscribe(chatMessagesTopic, ch)
+	ch, unsubscribe, err := s.broker.Subscribe(chatMessagesTopic)
 	if err != nil {
 		return nil, err
 	}
 
 	go s.listenMessages(ch)
 
-	return sub.Unsubscribe, nil
+	return unsubscribe, nil
 }
 
-func (s *ChatService) listenMessages(ch chan *nats.Msg) {
+func (s *ChatService) listenMessages(ch <-chan []byte) {
 	for msg := range ch {
 		var tm TopicEvent
-		if err := json.Unmarshal(msg.Data, &tm); err != nil {
+		if err := json.Unmarshal(msg, &tm); err != nil {
 			fmt.Printf("failed to unmarshal received message: %v\n", err)
 			continue
 		}
@@ -202,7 +201,7 @@ func (s *ChatService) publish(event TopicEvent) error {
 	if err != nil {
 		return err
 	}
-	return s.nc.Publish(chatMessagesTopic, msgBytes)
+	return s.broker.Publish(chatMessagesTopic, msgBytes)
 }
 
 func (s *ChatService) Delete(ctx context.Context, id int) error {

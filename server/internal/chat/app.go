@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 
+	"server/internal/chat/broker"
 	"server/internal/chat/controllers"
 	"server/internal/chat/gen/chat"
 	"server/internal/chat/gen/ent"
@@ -89,7 +90,8 @@ func (a *App) ConnectAuthClient() func() error {
 func (a *App) SetupGrpcServer() func() {
 	chatRepo := repos.NewChatRepo(a.db)
 
-	chatService := services.NewChatService(a.nc, chatRepo)
+	b := broker.NewNatsMessageBroker(a.nc)
+	chatService := services.NewChatService(b, chatRepo)
 	disposeChatService, err := chatService.Init()
 	if err != nil {
 		log.Fatalf("failed initializing chat service: %v", err)

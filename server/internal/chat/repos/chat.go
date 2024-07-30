@@ -11,6 +11,15 @@ import (
 	"entgo.io/ent/dialect/sql/sqljson"
 )
 
+type Chat interface {
+	Create(ctx context.Context, name string, users []int) (int, error)
+	AddMessage(ctx context.Context, chatID, userID int, username, message string) error
+	Get(ctx context.Context, chatID int) (*ent.Chat, error)
+	GetHistory(ctx context.Context, chatID int) ([]*ent.ChatMessage, error)
+	GetList(ctx context.Context, userID int) ([]*ent.Chat, error)
+	Delete(ctx context.Context, id int) error
+}
+
 type ChatRepo struct {
 	client *ent.Client
 }
