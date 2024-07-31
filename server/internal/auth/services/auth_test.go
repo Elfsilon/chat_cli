@@ -1,4 +1,4 @@
-package controllers
+package services
 
 import (
 	"context"
@@ -6,9 +6,7 @@ import (
 	"server/internal/auth/gen/user"
 	"server/internal/auth/mocks"
 	"server/internal/auth/repos"
-	"server/internal/auth/services"
 	"server/internal/auth/utils"
-	"server/pkg/gen/auth"
 	"server/pkg/utils/role"
 	"testing"
 	"time"
@@ -23,7 +21,7 @@ const (
 	adminPermissionsResource = "/user.UserService/GetList"
 )
 
-func initialize(t *testing.T, tokenized bool, r role.Role) (context.Context, *AuthController, error) {
+func initialize(t *testing.T, tokenized bool, r role.Role) (context.Context, *AuthService, error) {
 	t.Helper()
 
 	ttl := 3 * time.Second
@@ -32,7 +30,7 @@ func initialize(t *testing.T, tokenized bool, r role.Role) (context.Context, *Au
 	ra := utils.NewRequestAuthorizer(tm)
 
 	rep := repos.NewSessionMockRepo()
-	if _, err := rep.Create(context.Background(), 0, "ref", time.Now().Add(time.Hour)); err != nil {
+	if _, err := rep.Create(context.Background(), 1, "ref", time.Now().Add(time.Hour)); err != nil {
 		return nil, nil, err
 	}
 
@@ -47,8 +45,7 @@ func initialize(t *testing.T, tokenized bool, r role.Role) (context.Context, *Au
 		return nil, nil, err
 	}
 
-	s := services.NewAuthService("", client, rep, tm, tu, ra)
-	c := NewAuthController(s)
+	s := NewAuthService("", client, rep, tm, tu, ra)
 
 	ctx := context.Background()
 	if tokenized {
@@ -61,86 +58,73 @@ func initialize(t *testing.T, tokenized bool, r role.Role) (context.Context, *Au
 		ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("t", "t"))
 	}
 
-	return ctx, c, nil
+	return ctx, s, nil
 }
 
 func TestCheckUnprotectedResourceGrantedWithoutToken(t *testing.T) {
 	ctx, c, err := initialize(t, false, role.User)
 	assert.NoError(t, err)
 
-	req := &auth.CheckResourceRequest{FullMethod: freeResource}
-	res, _ := c.CheckResource(ctx, req)
-	assert.Empty(t, "", res.Reason)
-	assert.Equal(t, true, res.HasAccess)
+	_, err = c.CheckAccess(ctx, freeResource)
+	assert.NoError(t, err)
 }
 
 func TestCheckProtectedResourceDeniedWithoutToken(t *testing.T) {
 	ctx, c, err := initialize(t, false, role.User)
 	assert.NoError(t, err)
 
-	req := &auth.CheckResourceRequest{FullMethod: userPermissionsResource}
-	res, _ := c.CheckResource(ctx, req)
-	assert.NotEmpty(t, res.Reason)
-	assert.Equal(t, false, res.HasAccess)
+	_, err = c.CheckAccess(ctx, userPermissionsResource)
+	assert.Error(t, err)
 }
 
 func TestCheckUserResourceWithUserPermissionsGranted(t *testing.T) {
 	ctx, c, err := initialize(t, true, role.User)
 	assert.NoError(t, err)
 
-	req := &auth.CheckResourceRequest{FullMethod: userPermissionsResource}
-	res, _ := c.CheckResource(ctx, req)
-	assert.Empty(t, res.Reason)
-	assert.Equal(t, true, res.HasAccess)
+	_, err = c.CheckAccess(ctx, userPermissionsResource)
+	assert.NoError(t, err)
 }
 
 func TestCheckAdminResourceWithUserPermissionsDenied(t *testing.T) {
 	ctx, c, err := initialize(t, true, role.User)
 	assert.NoError(t, err)
 
-	req := &auth.CheckResourceRequest{FullMethod: adminPermissionsResource}
-	res, _ := c.CheckResource(ctx, req)
-	assert.NotEmpty(t, res.Reason)
-	assert.Equal(t, false, res.HasAccess)
+	_, err = c.CheckAccess(ctx, adminPermissionsResource)
+	assert.Error(t, err)
 }
 
 func TestCheckAdminResourceWithAdminPermissionsGranted(t *testing.T) {
 	ctx, c, err := initialize(t, true, role.Admin)
 	assert.NoError(t, err)
 
-	req := &auth.CheckResourceRequest{FullMethod: adminPermissionsResource}
-	res, _ := c.CheckResource(ctx, req)
-	assert.Empty(t, res.Reason)
-	assert.Equal(t, true, res.HasAccess)
+	_, err = c.CheckAccess(ctx, adminPermissionsResource)
+	assert.NoError(t, err)
 }
 
 func TestGetAccessToken(t *testing.T) {
 	ctx, c, err := initialize(t, true, role.Admin)
 	assert.NoError(t, err)
 
-	req := &auth.GetAccessTokenRequest{RefreshToken: "ref"}
-	res, err := c.GetAccessToken(ctx, req)
+	token, err := c.GetAccessToken(ctx, "ref")
 	assert.NoError(t, err)
-	assert.NotEmpty(t, res.AccessToken)
+	assert.NotEmpty(t, token)
 }
 
 func TestGetRefreshToken(t *testing.T) {
 	ctx, c, err := initialize(t, true, role.Admin)
 	assert.NoError(t, err)
 
-	req := &auth.GetRefreshTokenRequest{RefreshToken: "ref"}
-	res, err := c.GetRefreshToken(ctx, req)
+	token, err := c.GetRefreshToken(ctx, "ref")
 	assert.NoError(t, err)
-	assert.NotEmpty(t, res.RefreshToken)
-	assert.NotEqual(t, "ref", res.RefreshToken)
+	assert.NotEmpty(t, token)
+	assert.NotEqual(t, "ref", token)
 }
 
 func TestLogin(t *testing.T) {
 	ctx, c, err := initialize(t, true, role.Admin)
 	assert.NoError(t, err)
 
-	req := &auth.LoginRequest{Name: "Julian", Password: "password"}
-	res, err := c.Login(ctx, req)
+	_, token, err := c.Login(ctx, "Julian", "password")
 	assert.NoError(t, err)
-	assert.NotEmpty(t, res.RefreshToken)
+	assert.NotEmpty(t, token)
 }

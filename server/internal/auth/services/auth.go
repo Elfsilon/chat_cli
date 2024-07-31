@@ -130,12 +130,13 @@ func (s *AuthService) GetAccessToken(ctx context.Context, refreshToken string) (
 
 	ctx = s.tokenUpdater.Context(ctx)
 	req := &user.GetRequest{Id: int64(session.UserID)}
-
 	user, err := s.uclient.Get(ctx, req)
 	if err != nil {
 		return "", err
 	}
-
+	if user == nil {
+		return "", errors.New("user is nil")
+	}
 	accessToken, err := s.tokenManager.GenerateAccessToken(session.UserID, user.Name, int(user.Role))
 	if err != nil {
 		return "", nil
