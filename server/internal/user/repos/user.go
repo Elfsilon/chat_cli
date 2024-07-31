@@ -7,6 +7,16 @@ import (
 	"server/pkg/utils/role"
 )
 
+type User interface {
+	Create(ctx context.Context, name string, email string, passwordHash string, role role.Role) (int, error)
+	GetByID(ctx context.Context, id int) (*ent.User, error)
+	GetByName(ctx context.Context, name string) (*ent.User, error)
+	GetList(ctx context.Context) ([]*ent.User, error)
+	UpdateName(ctx context.Context, id int, name string) error
+	UpdateEmail(ctx context.Context, id int, email string) error
+	Delete(ctx context.Context, id int) error
+}
+
 type UserRepo struct {
 	client *ent.Client
 }
